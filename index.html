@@ -17,6 +17,7 @@
             --text-color: #FFFFFF;
             --secondary-text: #B3B3B3;
             --container-bg: #181818;
+            --error-color: #ff6b6b; /* Red for errors */
         }
 
         body {
@@ -52,29 +53,19 @@
             box-shadow: 0 0 10px var(--primary-color);
         }
 
-        /* The glowing and pulsing animation for the visualizer */
         #visualizer.playing {
             animation: pulse 2s infinite ease-in-out;
         }
 
         @keyframes pulse {
-            0% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.7);
-            }
-            70% {
-                transform: scale(1);
-                box-shadow: 0 0 10px 20px rgba(29, 185, 84, 0);
-            }
-            100% {
-                transform: scale(0.95);
-                box-shadow: 0 0 0 0 rgba(29, 185, 84, 0);
-            }
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(29, 185, 84, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 10px 20px rgba(29, 185, 84, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(29, 185, 84, 0); }
         }
 
         .player-info {
             margin-bottom: 30px;
-            height: 60px; /* Prevents layout shift */
+            height: 60px; 
         }
 
         #trackTitle {
@@ -88,11 +79,13 @@
             color: var(--secondary-text);
             margin-top: 5px;
         }
-
-        #moodForm {
-            display: flex;
-            gap: 10px;
+        
+        /* New style for error messages */
+        .error-message {
+            color: var(--error-color) !important;
         }
+
+        #moodForm { display: flex; gap: 10px; }
 
         #moodInput {
             flex-grow: 1;
@@ -104,10 +97,7 @@
             font-size: 1em;
         }
 
-        #moodInput:focus {
-            outline: none;
-            border-color: var(--primary-color);
-        }
+        #moodInput:focus { outline: none; border-color: var(--primary-color); }
 
         button {
             padding: 15px 25px;
@@ -120,9 +110,7 @@
             transition: background-color 0.3s ease;
         }
 
-        button:hover {
-            background-color: #1ed760;
-        }
+        button:hover { background-color: #1ed760; }
 
         #nextBtn {
             margin-top: 20px;
@@ -130,44 +118,33 @@
             border: 1px solid var(--primary-color);
         }
 
-        #nextBtn:hover {
-            background-color: var(--primary-color);
-        }
+        #nextBtn:hover { background-color: var(--primary-color); }
 
-        .hidden {
-            display: none;
-        }
+        .hidden { display: none; }
     </style>
 </head>
 <body>
-    <!-- --- HTML CONTENT --- -->
     <div class="container">
         <div id="visualizer"></div>
-
         <div class="player-info" id="playerInfo">
             <h2 id="trackTitle">How are you feeling?</h2>
             <p id="trackArtist">Describe your mood below and I'll find something for you.</p>
         </div>
-
         <form id="moodForm">
             <input type="text" id="moodInput" placeholder="e.g., I'm stressed about my upcoming presentation..." autocomplete="off">
-            <button type="submit">Get help</button>
+            <button type="submit">Find Audio ✨</button>
         </form>
-
         <button id="nextBtn" class="hidden">Next ➤</button>
     </div>
 
     <audio id="audioPlayer"></audio>
 
     <script>
-        // --- JAVASCRIPT LOGIC ---
+        // --- 1. PASTE YOUR *NEW* AND *SECRET* KEYS HERE ---
+        const SPOTIFY_CLIENT_ID = '31c4429c000240eda273903a01678a4d'; // Replace with your actual ID
+        const SPOTIFY_CLIENT_SECRET = '702ea2856e5042deaf681761a0ede92d'; // Replace with your actual Secret
+        const GEMINI_API_KEY = 'AIzaSyChEhb1ml7k-LD-n9GpmKX0NPrOGP-cM9w'; // Replace with your new, secure key
 
-        // --- 1. IMPORTANT: PASTE YOUR API KEYS HERE ---
-        const SPOTIFY_CLIENT_ID = '31c4429c000240eda273903a01678a4d';
-        const SPOTIFY_CLIENT_SECRET = '702ea2856e5042deaf681761a0ede92d';
-        const GEMINI_API_KEY = 'AIzaSyChEhb1ml7k-LD-n9GpmKX0NPrOGP-cM9w';
-
-        // --- 2. DOM ELEMENTS ---
         const moodForm = document.getElementById('moodForm');
         const moodInput = document.getElementById('moodInput');
         const visualizer = document.getElementById('visualizer');
@@ -175,21 +152,21 @@
         const trackTitle = document.getElementById('trackTitle');
         const trackArtist = document.getElementById('trackArtist');
         const nextBtn = document.getElementById('nextBtn');
-        const playerInfo = document.getElementById('playerInfo');
 
-        // --- 3. GLOBAL VARIABLES ---
         let spotifyToken = null;
         let searchResults = [];
         let currentTrackIndex = 0;
+        
+        function clearErrorMessages() {
+            trackTitle.classList.remove('error-message');
+            trackArtist.classList.remove('error-message');
+        }
 
-        // --- 4. API FUNCTIONS ---
-
-        /**
-         * Gets an authentication token from Spotify.
-         * This is required to make any other requests to the Spotify API.
-         */
         async function getSpotifyToken() {
             try {
+                if (!SPOTIFY_CLIENT_ID || SPOTIFY_CLIENT_ID === 'YOUR_SPOTIFY_CLIENT_ID') {
+                     throw new Error("Spotify Client ID is missing.");
+                }
                 const response = await fetch('https://accounts.spotify.com/api/token', {
                     method: 'POST',
                     headers: {
@@ -198,62 +175,55 @@
                     },
                     body: 'grant_type=client_credentials'
                 });
-                if (!response.ok) throw new Error(`Spotify token request failed with status: ${response.status}`);
+                if (!response.ok) throw new Error(`Spotify auth failed: ${response.statusText}`);
                 const data = await response.json();
                 spotifyToken = data.access_token;
             } catch (error) {
                 console.error("Error getting Spotify token:", error);
-                trackTitle.textContent = "Error connecting to Spotify.";
-                trackArtist.textContent = "Please check your API keys and try again.";
+                trackTitle.classList.add('error-message');
+                trackArtist.classList.add('error-message');
+                trackTitle.textContent = "Error: Spotify Connection";
+                trackArtist.textContent = `See the Console for details.`;
             }
         }
 
-        /**
-         * Gets search keywords from the user's mood using the Gemini API.
-         * @param {string} moodText - The user's input text.
-         * @returns {Promise<string>} A string of keywords for Spotify search.
-         */
         async function getKeywordsFromGemini(moodText) {
+            clearErrorMessages();
             trackTitle.textContent = "Thinking...";
             trackArtist.textContent = "Analyzing your mood with Gemini AI.";
-            if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY') {
-                trackTitle.textContent = "Gemini API Key Missing";
-                trackArtist.textContent = "Please add your Gemini API key in the script.";
-                return null;
+            if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_NEW_GEMINI_API_KEY') {
+                 throw new Error("Gemini API Key is missing.");
             }
             try {
                 const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
                 const prompt = `Based on this user's mood: "${moodText}", generate a short, comma-separated list of 3-5 keywords for finding a motivational or mood-lifting audio track on Spotify. Focus on themes, genres, and positive concepts. For example, for "I failed my exam", good keywords are "overcoming failure, self-worth, motivational speech, resilience". For "I'm feeling anxious", keywords might be "calm, focus, ambient, instrumental, meditation".`;
-
                 const response = await fetch(url, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [{ text: prompt }] }]
-                    })
+                    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
                 });
-                if (!response.ok) throw new Error(`Gemini API request failed with status: ${response.status}`);
-
+                if (!response.ok) throw new Error(`API returned status ${response.status}. See console.`);
                 const data = await response.json();
-                const keywords = data.candidates[0].content.parts[0].text;
-                return keywords.replace(/\s/g, '+'); // Replace spaces with '+' for the URL
+                if (!data.candidates || data.candidates.length === 0) {
+                   throw new Error("Gemini returned no content. Your key may be invalid or restricted.");
+                }
+                return data.candidates[0].content.parts[0].text.replace(/\s/g, '+'); 
             } catch (error) {
                 console.error("Error with Gemini API:", error);
-                trackTitle.textContent = "Error with Gemini AI.";
-                trackArtist.textContent = "Couldn't generate keywords. Check the console.";
+                trackTitle.classList.add('error-message');
+                trackArtist.classList.add('error-message');
+                trackTitle.textContent = "Error: Gemini AI";
+                trackArtist.textContent = "Could not get keywords. See console.";
                 return null;
             }
         }
 
-        /**
-         * Searches Spotify for tracks using keywords.
-         * Note: The Spotify API provides 30-second previews, not full tracks.
-         * @param {string} keywords - The search query.
-         */
         async function searchSpotify(keywords) {
             if (!spotifyToken) {
-                console.error("No Spotify token available.");
-                trackTitle.textContent = "Spotify connection error.";
+                trackTitle.classList.add('error-message');
+                trackArtist.classList.add('error-message');
+                trackTitle.textContent = "Error: Spotify Connection";
+                trackArtist.textContent = "Cannot search without a valid token.";
                 return;
             }
             trackTitle.textContent = "Searching Spotify...";
@@ -262,13 +232,10 @@
             try {
                 const url = `https://api.spotify.com/v1/search?q=${keywords}&type=track&limit=10&market=US`;
                 const response = await fetch(url, {
-                    headers: {
-                        'Authorization': `Bearer ${spotifyToken}`
-                    }
+                    headers: { 'Authorization': `Bearer ${spotifyToken}` }
                 });
-                if (!response.ok) throw new Error(`Spotify search failed with status: ${response.status}`);
+                if (!response.ok) throw new Error(`API returned status ${response.status}. See console.`);
                 const data = await response.json();
-                // Filter out results that don't have a preview URL
                 searchResults = data.tracks.items.filter(track => track.preview_url);
 
                 if (searchResults.length > 0) {
@@ -283,51 +250,36 @@
                 }
             } catch (error) {
                 console.error("Error searching Spotify:", error);
-                trackTitle.textContent = "Error searching Spotify.";
+                trackTitle.classList.add('error-message');
+                trackArtist.classList.add('error-message');
+                trackTitle.textContent = "Error: Spotify Search";
+                trackArtist.textContent = "The search failed. See console.";
             }
         }
 
-
-        // --- 5. UI & PLAYER FUNCTIONS ---
-
-        /**
-         * Plays a track and updates the UI.
-         * @param {object} track - The Spotify track object.
-         */
         function playTrack(track) {
             if (!track || !track.preview_url) {
-                console.log("Track has no preview URL, skipping to the next one.");
-                playNextTrack(); // Automatically try the next one
+                playNextTrack(); 
                 return;
             }
+            clearErrorMessages();
             audioPlayer.src = track.preview_url;
             audioPlayer.play();
             trackTitle.textContent = track.name;
             trackArtist.textContent = track.artists.map(artist => artist.name).join(', ');
         }
 
-        /**
-         * Plays the next track in the results list.
-         */
         function playNextTrack() {
             if (searchResults.length === 0) return;
-            
-            currentTrackIndex++;
-            if (currentTrackIndex >= searchResults.length) {
-                currentTrackIndex = 0; // Loop back to the beginning
-            }
+            currentTrackIndex = (currentTrackIndex + 1) % searchResults.length;
             playTrack(searchResults[currentTrackIndex]);
         }
 
-        // --- 6. EVENT LISTENERS ---
-
-        // Handle the main form submission
         moodForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const moodText = moodInput.value.trim();
             if (!moodText) return;
 
-            // Stop any currently playing audio before starting a new search
             audioPlayer.pause();
             visualizer.classList.remove('playing');
 
@@ -337,29 +289,13 @@
             }
         });
 
-        // Handle the "Next" button click
         nextBtn.addEventListener('click', playNextTrack);
+        audioPlayer.addEventListener('play', () => { visualizer.classList.add('playing'); });
+        audioPlayer.addEventListener('pause', () => { visualizer.classList.remove('playing'); });
+        audioPlayer.addEventListener('ended', () => { visualizer.classList.remove('playing'); });
 
-        // Control the visualizer animation
-        audioPlayer.addEventListener('play', () => {
-            visualizer.classList.add('playing');
-        });
-
-        audioPlayer.addEventListener('pause', () => {
-            visualizer.classList.remove('playing');
-        });
-
-        audioPlayer.addEventListener('ended', () => {
-            visualizer.classList.remove('playing');
-        });
-
-        // --- 7. INITIALIZATION ---
-
-        // Get the Spotify token when the page loads
         window.addEventListener('load', getSpotifyToken);
     </script>
 </body>
 </html>
-
-
 
